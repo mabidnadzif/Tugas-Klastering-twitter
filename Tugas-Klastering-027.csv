@@ -1,0 +1,155 @@
+#Melakukan intalasi snsscrape dengan perintah berikut :
+!pip3 install snscrape
+ 
+#Setelah itu lakukan intalasi langdetect seperti perintah di bawah, dimana langdetect berfungsi untuk mengimplementasi ulang pustaka deteksi bahasa Google ke Python
+pip install langdetect
+ 
+#Import juga library seperti langkah berikut
+import snscrape.modules.twitter as sntwitter
+import json
+from langdetect import detect
+
+#Masukan keyword / kata kunci yang akan kita lakukan proses pencarian topik di twitter, masukan juga tanggal mulai ( start ) dan tanggal akhir ( end ) untuk mendapatkan atau mengambil dari tanggal mulai dan akhir yang di tentukan / di masukkan, masukan juga ( max_num ) di mana perintah ini akan mmenghitung jumlah maksimum banyaknya data yang akan di ambil
+keywords=['Mochamad Iriawan']
+start="2022–10–13"
+end ="2022–10–17"
+max_num=100
+fname='tweet.json' 
+languages=['id','en']
+ 
+#Kemudian import pandas
+import pandas as pd
+datatw=[]
+ 
+#Selanjutnya masukkan beberapa perintah seperti di bawah ini, di mana fungsi dari perintah ini adalah melakukan pencarian dan menampilkan data pada twiter sesuai dengan apa yang kita tentukan di atas
+for keyword in keywords:
+   
+    for i, tweet in enumerate (sntwitter.TwitterSearchScraper(f'{keyword} ').get_items()):
+        
+        try:
+            lan=detect(tweet.content)
+        except:
+            lan='error'
+        if i == max_num:
+            break
+        if lan in languages:
+            data = {'id': tweet.id, 'username':tweet.username, 'date': tweet.date, 'text': tweet.content,'url':tweet.url}
+           # print(data)
+            datatw.append(tweet.content)
+            with open(fname, 'a+', encoding='utf-8') as f:
+                line = json.dumps(data, ensure_ascii=False,default=str)
+                #print(line)
+                f.write(line)
+                f.write('\n')
+datatw
+
+#Selanjutnya install sastrawi di mana satraei berfungsi untuk mengurangi kata-kata yang terinfleksi dalam Bahasa Indonesia ke bentuk dasarnya
+!pip install Sastrawi
+ 
+#Lalu gunakan perintah di bawah ini untuk menghapus semua karakter tidak dapat dicetak dari teks
+import re
+import string
+from Sastrawi.Stemmer.StemmerFactory import StemmerFactory# create stemmer
+factory = StemmerFactory()
+stemmer = factory.create_stemmer()# stemming process
+# import StopWordRemoverFactory class
+from Sastrawi.StopWordRemover.StopWordRemoverFactory import StopWordRemoverFactory
+factory = StopWordRemoverFactory()
+stopword = factory.create_stop_word_remover()
+documents_clean=[]
+
+for d in datatw:
+    outputstem= stemmer.stem(d)
+    d= stopword.remove(outputstem)
+    # Remove Unicode
+    document_test = re.sub(r'[^\x00-\x7F]+', ' ', d)
+    # Remove Mentions
+    document_test = re.sub(r'@\w+', '', document_test)
+    # Lowercase the document
+    document_test = document_test.lower()
+    # Remove punctuations
+    document_test = re.sub(r'[%s]' % re.escape(string.punctuation), ' ', document_test)
+    # Lowercase the numbers
+    document_test = re.sub(r'[0-9]', '', document_test)
+    # Remove the doubled space
+    outputstop = re.sub(r'\s{2,}', ' ', document_test)
+    documents_clean.append(outputstop)
+ 
+ 
+#Kemudian gunakan perintah documents_clean untuk menampilkan dokumen
+documents_clean[0:5]
+ 
+
+#import TfidfVectorizer yang berfungsi sebagai normalisasi nilai bobot yang diperoleh, supaya nilai bobot berada pada range yang sama.
+from sklearn.feature_extraction.text import TfidfVectorizer
+import pandas as pd
+tfidfvectorizer = TfidfVectorizer(analyzer='word')
+tfidf_wm = tfidfvectorizer.fit_transform(documents_clean)
+tfidf_tokens = tfidfvectorizer.get_feature_names()
+
+#Kemudian import juga CountVectorizer untuk menghitung frekuensi kata dalam dokumen. Count Vectorizer dapat mengubah fitur teks menjadi sebuah representasi vector.
+from sklearn.feature_extraction.text import CountVectorizer 
+import matplotlib.pyplot as plt
+import numpy as np # linear algebra
+import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
+cv = CountVectorizer()
+words = cv.fit_transform(documents_clean)
+sum_words = words.sum(axis=0)
+
+
+words_freq = [(word, sum_words[0, idx]) for word, idx in cv.vocabulary_.items()]
+words_freq = sorted(words_freq, key = lambda x: x[1], reverse = True)
+frequency = pd.DataFrame(words_freq, columns=['word', 'freq'])
+
+color = plt.cm.twilight(np.linspace(0, 1, 20))
+frequency.head(20).plot(x='word', y='freq', kind='bar', figsize=(15, 7), color = color)
+plt.title("Most Frequently Occuring Words - Top 20")
+ 
+
+#Lakukkan clustering pada kata tersebut, menggunakan perintah di bawah
+from sklearn.cluster import KMeans
+true_k = 3
+model = KMeans(n_clusters=true_k, init='k-means++', max_iter=100, n_init=1)
+model.fit(words)
+
+#menampilkan kelompok cluster dengan kata kunci yang kita cari diatas tadi
+order_centroids = model.cluster_centers_.argsort()[:, ::-1]
+terms = cv.get_feature_names()
+
+for i in range(true_k):
+    print("Cluster %d:" % i),
+    for ind in order_centroids[i, :10]:
+        print(' %s' % terms[ind]),
+    print
+
+print("\n")
+
+ 
+#setelah melakukan cluster kita bisa juga melakukan prediction, dimana kata tersebut tergabung dengan kelompok cluster mana saja,
+print("Prediction")
+Y = cv.transform(["iwan bule"])
+prediction = model.predict(Y)
+print("Cluster number :", prediction)
+Y = cv.transform(["ketua pssi"])
+prediction = model.predict(Y)
+print("Cluster number :", prediction)
+
+ 
+import scipy.cluster.hierarchy as sch
+X = cv.fit_transform(documents_clean).todense()
+dendrogram = sch.dendrogram(sch.linkage(X, method = 'ward',metric='euclidean'),orientation="top")
+plt.title('Dendrogram')
+plt.xlabel('Jarak Ward')
+plt.ylabel('Nomor Dokumen')
+plt.show()
+
+ 
+import scipy.cluster.hierarchy as sch
+X = cv.fit_transform(documents_clean).todense()
+dendrogram = sch.dendrogram(sch.linkage(X, method = 'average',metric='euclidean'),orientation="right")
+plt.title('Dendrogram')
+plt.xlabel('Jarak Rerata')
+plt.ylabel('Nomor Dokumen')
+plt.show()
+
+
